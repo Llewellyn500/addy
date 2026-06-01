@@ -33,7 +33,7 @@ jobs:
             name: macos-arm64
             binary: addy
             pyinstaller_extra: "--icon=docs/assets/icon.icns"
-          - os: macos-13          # Intel (x86_64)
+          - os: macos-15-intel    # Intel (x86_64)
             name: macos-intel
             binary: addy
             pyinstaller_extra: "--icon=docs/assets/icon.icns"
