@@ -32,11 +32,11 @@ jobs:
           - os: macos-latest      # Apple Silicon (ARM64)
             name: macos-arm64
             binary: addy
-            pyinstaller_extra: "--icon=docs/assets/icon.icns"
+            pyinstaller_extra: "--noconsole --icon=docs/assets/icon.icns"
           - os: macos-15-intel    # Intel (x86_64)
             name: macos-intel
             binary: addy
-            pyinstaller_extra: "--icon=docs/assets/icon.icns"
+            pyinstaller_extra: "--noconsole --icon=docs/assets/icon.icns"
 
     runs-on: ${{ matrix.os }}
 
@@ -68,6 +68,8 @@ jobs:
           cd dist
           if [[ "${{ matrix.name }}" == windows-* ]]; then
             mv "${{ matrix.binary }}" "addy-${{ matrix.name }}.exe"
+          elif [[ "${{ matrix.name }}" == macos-* ]]; then
+            zip -r "addy-${{ matrix.name }}.zip" addy.app
           else
             mv "${{ matrix.binary }}" "addy-${{ matrix.name }}"
           fi
@@ -115,10 +117,10 @@ jobs:
             |----------|------|
             | 🐧 Linux (x86_64) | `addy-linux-amd64` |
             | 🪟 Windows (x86_64) | `addy-windows-amd64.exe` |
-            | 🍎 macOS (Apple Silicon) | `addy-macos-arm64` |
-            | 🍎 macOS (Intel x86_64) | `addy-macos-intel` |
+            | 🍎 macOS (Apple Silicon) | `addy-macos-arm64.zip` |
+            | 🍎 macOS (Intel x86_64) | `addy-macos-intel.zip` |
 
-            > **macOS users:** After downloading, run `chmod +x addy-macos-arm64` (or `addy-macos-intel`) and then right-click → Open to bypass Gatekeeper on first launch.
+            > **macOS users:** After downloading, unzip the file, run `chmod -R +x addy.app` in Terminal (if it doesn't open), and then right-click `addy.app` → **Open** to bypass Gatekeeper on first launch.
             >
             > **Linux users:** Run `chmod +x addy-linux-amd64` to make the binary executable.
           generate_release_notes: true
