@@ -931,6 +931,14 @@ class AddyApp:
         )
         self.refresh_btn.pack(side="right")
 
+        import webbrowser
+        self.github_btn = NeoButton(
+            header, text="GitHub", command=lambda: webbrowser.open("https://github.com/Llewellyn500/addy"),
+            bg=self.BG, button_bg="#ffffff", hover_bg="#ffd23f",
+            width=100, height=40, font=(self.FONT_FAMILY, 12, "bold")
+        )
+        self.github_btn.pack(side="right", padx=(0, 10))
+
         tk.Label(
             self.root, text="Active network interfaces",
             font=(self.FONT_FAMILY, 10, "bold"), bg=self.BG, fg=self.TEXT, anchor="w",
