@@ -13,7 +13,7 @@ Only the latest release is supported with security updates.
 
 If you discover a security vulnerability, **please do not open a public issue.**
 
-Instead, email **[your-email@example.com]** with:
+Instead, email **llewellynpaintsil34@gmail.com** with:
 
 - A description of the vulnerability
 - Steps to reproduce it

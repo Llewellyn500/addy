@@ -52,14 +52,14 @@ python addy.py
 
 ### 🐛 Fix a Bug
 
-1. Check the [Issues](../../issues) page to see if it's already reported
-2. If not, [open a new issue](../../issues/new?template=bug_report.yml) first so we can discuss
+1. Check the [Issues](https://github.com/Llewellyn500/addy/issues) page to see if it's already reported
+2. If not, [open a new issue](https://github.com/Llewellyn500/addy/issues/new?template=bug_report.md) first so we can discuss
 3. Fork, fix, and open a PR referencing the issue
 
 ### ✨ Add a Feature
 
-1. Check [existing feature requests](../../issues?q=is%3Aissue+label%3Aenhancement)
-2. If your idea is new, [open a feature request](../../issues/new?template=feature_request.yml) first
+1. Check [existing feature requests](https://github.com/Llewellyn500/addy/issues?q=is%3Aissue+label%3Aenhancement)
+2. If your idea is new, [open a feature request](https://github.com/Llewellyn500/addy/issues/new?template=feature_request.md) first
 3. Wait for a maintainer to approve the direction before writing code
 4. Fork, implement, and open a PR
 

@@ -36,7 +36,7 @@ A beautiful, ultra-lightweight cross-platform system tray utility that displays 
 ## 📥 Installation
 
 ### 1. Download Pre-built Binaries (Recommended)
-You don't need Python to run Addy. Go to the [Releases](../../releases) tab and download the standalone executable for your operating system:
+You don't need Python to run Addy. Go to the [Releases](https://github.com/Llewellyn500/addy/releases) tab and download the standalone executable for your operating system:
 * **Windows**: `addy-windows-amd64.exe`
 * **macOS**: `addy-macos-arm64` (Apple Silicon)
 * **Linux**: `addy-linux-amd64`
@@ -89,10 +89,10 @@ Contributions make the open-source community an amazing place to learn, inspire,
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-Please read [CONTRIBUTING.md](file:///D:/01_DEV/03_CODE/ip-show/CONTRIBUTING.md) for details on our code of conduct, development setup, and coding standards.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct, development setup, and coding standards.
 
 ---
 
 ## 📄 License
 
-Distributed under the MIT License. See [LICENSE](file:///D:/01_DEV/03_CODE/ip-show/LICENSE) for more information.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
