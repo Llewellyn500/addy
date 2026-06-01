@@ -344,24 +344,12 @@ class AddyApp:
                     pystray.MenuItem("Quit", self._tray_quit),
                 ),
             )
-            threading.Thread(
-                target=lambda: self.tray_icon.run(setup=self._on_tray_ready),
-                daemon=True,
-            ).start()
+            threading.Thread(target=self.tray_icon.run, daemon=True).start()
             self.root.protocol("WM_DELETE_WINDOW", self._minimize_to_tray)
         except Exception:
             self.tray_icon = None
             self.root.protocol("WM_DELETE_WINDOW", self._quit)
 
-    def _on_tray_ready(self, icon):
-        """Called once the tray icon is visible — show a startup balloon."""
-        try:
-            icon.notify(
-                "Click the tray icon to view your IP addresses.",
-                "Addy is running",
-            )
-        except Exception:
-            pass
 
     def _minimize_to_tray(self):
         self.root.withdraw()
