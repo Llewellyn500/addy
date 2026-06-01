@@ -1,4 +1,4 @@
-# Build standalone executables for Windows, macOS (Intel + Apple Silicon), and Linux,
+# Build standalone executables for Windows, macOS, and Linux,
 # then publish them as a GitHub Release on every merge to main.
 
 name: Build & Release
@@ -25,11 +25,7 @@ jobs:
             name: windows-amd64
             binary: addy.exe
             pyinstaller_extra: "--noconsole"
-          - os: macos-13          # Intel runner
-            name: macos-intel
-            binary: addy
-            pyinstaller_extra: ""
-          - os: macos-latest      # Apple Silicon runner
+          - os: macos-latest      # Apple Silicon (ARM64)
             name: macos-arm64
             binary: addy
             pyinstaller_extra: ""
@@ -111,10 +107,9 @@ jobs:
             |----------|------|
             | 🐧 Linux (x86_64) | `addy-linux-amd64` |
             | 🪟 Windows (x86_64) | `addy-windows-amd64.exe` |
-            | 🍎 macOS Intel | `addy-macos-intel` |
-            | 🍎 macOS Apple Silicon | `addy-macos-arm64` |
+            | 🍎 macOS (Apple Silicon) | `addy-macos-arm64` |
 
-            > **macOS users:** After downloading, you may need to run `chmod +x addy-macos-*` and then right-click → Open to bypass Gatekeeper on first launch.
+            > **macOS users:** After downloading, run `chmod +x addy-macos-arm64` and then right-click → Open to bypass Gatekeeper on first launch.
             >
             > **Linux users:** Run `chmod +x addy-linux-amd64` to make the binary executable.
           generate_release_notes: true
