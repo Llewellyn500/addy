@@ -8,11 +8,7 @@ foreground mobile app.
 
 from __future__ import annotations
 
-import json
 import socket
-import time
-import urllib.request
-import urllib.error
 import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,82 +24,10 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.utils import escape_markup
 
 __version__ = "1.0.0"
-
-_GITHUB_REPO = "Llewellyn500/addy"
-_UPDATE_STATE_FILE = Path.home() / ".config" / "addy" / "android-update-state.json"
-
-
-def _parse_version(version_str: str) -> tuple:
-    """Parse version string 'vYYYY.MM.DD-runid' into comparable tuple."""
-    try:
-        s = version_str.lstrip("v")
-        date_part, run_part = s.split("-", 1)
-        year, month, day = map(int, date_part.split("."))
-        run_id = int(run_part)
-        return (year, month, day, run_id)
-    except (ValueError, AttributeError):
-        return (0, 0, 0, 0)
-
-
-def _compare_versions(v1: str, v2: str) -> int:
-    """Compare versions. Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2."""
-    t1, t2 = _parse_version(v1), _parse_version(v2)
-    if t1 < t2:
-        return -1
-    elif t1 > t2:
-        return 1
-    return 0
-
-
-def _fetch_github_latest_release() -> dict | None:
-    """Fetch latest release info from GitHub API."""
-    try:
-        url = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(url, headers={"User-Agent": "Addy-Android"})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode())
-
-        tag = data.get("tag_name", "")
-
-        for asset in data.get("assets", []):
-            asset_name = asset.get("name", "")
-            if "android" in asset_name.lower() and asset_name.endswith(".apk"):
-                return {
-                    "tag": tag,
-                    "version": tag,
-                    "url": asset.get("browser_download_url", ""),
-                    "filename": asset_name,
-                }
-        return None
-    except Exception:
-        return None
-
-
-def _load_update_state() -> dict:
-    """Load update check state from config file."""
-    try:
-        if _UPDATE_STATE_FILE.exists():
-            with open(_UPDATE_STATE_FILE, "r") as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return {"last_check": 0, "last_available": None}
-
-
-def _save_update_state(state: dict) -> None:
-    """Save update check state to config file."""
-    try:
-        _UPDATE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(_UPDATE_STATE_FILE, "w") as f:
-            json.dump(state, f)
-    except Exception:
-        pass
-
 
 
 BG = "#0c0a14"
@@ -641,10 +565,6 @@ class AddyAndroidApp(App):
         self.github_btn.bind(on_release=lambda *_: _open_github())
         header.add_widget(self.github_btn)
 
-        self.check_updates_btn = _button("Check Updates", width=140 if not compact else 120, height=ACTION_HEIGHT)
-        self.check_updates_btn.bind(on_release=lambda *_: self._check_updates_clicked())
-        header.add_widget(self.check_updates_btn)
-
         self.refresh_btn = _button("Refresh", width=refresh_width, height=ACTION_HEIGHT)
         self.refresh_btn.bind(on_release=lambda *_: self.refresh_interfaces())
         header.add_widget(self.refresh_btn)
@@ -664,7 +584,6 @@ class AddyAndroidApp(App):
         root.add_widget(scroll)
 
         Clock.schedule_once(lambda _: self.refresh_interfaces(), 0.1)
-        Clock.schedule_once(lambda _: self._check_for_updates_bg(), 0.5)
         return root
 
     def refresh_interfaces(self):
@@ -701,96 +620,6 @@ class AddyAndroidApp(App):
 
         for info in interfaces:
             self.cards.add_widget(InterfaceCard(info))
-
-    def _check_updates_clicked(self):
-        """Handle manual check updates button click."""
-        self.check_updates_btn.set_visual(text="Checking", bg=ACCENT, color=INK)
-        self._check_for_updates_bg(force=True)
-
-    def _check_for_updates_bg(self, force=False):
-        """Check for updates in background."""
-        try:
-            state = _load_update_state()
-            now = time.time()
-
-            if not force and (now - state.get("last_check", 0) < 86400):
-                return
-
-            release = _fetch_github_latest_release()
-            if not release:
-                Clock.schedule_once(lambda _: self._reset_check_btn(), 0)
-                return
-
-            state["last_check"] = now
-            latest_version = release.get("version", "")
-            state["last_available"] = latest_version
-
-            if _compare_versions(__version__, latest_version) < 0:
-                _save_update_state(state)
-                Clock.schedule_once(
-                    lambda _: self._show_update_dialog(latest_version, release.get("url", "")),
-                    0
-                )
-            else:
-                _save_update_state(state)
-                Clock.schedule_once(lambda _: self._show_uptodate_popup(), 0)
-        except Exception:
-            Clock.schedule_once(lambda _: self._reset_check_btn(), 0)
-
-    def _reset_check_btn(self):
-        """Reset check button after check."""
-        try:
-            if hasattr(self, "check_updates_btn"):
-                self.check_updates_btn.set_visual(text="Check Updates", bg=BUTTON_BG, color=INK)
-        except Exception:
-            pass
-
-    def _show_uptodate_popup(self):
-        """Show popup saying app is up to date."""
-        self._reset_check_btn()
-        popup_layout = BoxLayout(orientation="vertical", padding=[dp(20)], spacing=dp(15))
-        popup_layout.add_widget(
-            _label("You're up to date!", size=16, height=80, halign="center", shorten=False, size_hint_y=0.7)
-        )
-        button_layout = BoxLayout(spacing=dp(10), size_hint_y=0.3)
-        btn = NeoButton(text="OK", width=100, height=44, color=INK, bg=BUTTON_BG, active_bg=ACCENT)
-        button_layout.add_widget(btn)
-        popup_layout.add_widget(button_layout)
-        popup = Popup(
-            title="Addy",
-            content=popup_layout,
-            size_hint=(0.9, 0.35),
-            background_color=_rgba(BG),
-            title_color=_rgba(TEXT),
-            title_size="18sp",
-        )
-        btn.bind(on_release=popup.dismiss)
-        popup.open()
-
-    def _show_update_dialog(self, new_version: str, download_url: str):
-        """Show update available dialog with GitHub link."""
-        self._reset_check_btn()
-        popup_layout = BoxLayout(orientation="vertical", padding=[dp(20)], spacing=dp(15))
-        popup_layout.add_widget(
-            _label(f"Addy {new_version} is available.", size=16, height=80, halign="center", shorten=False, size_hint_y=0.7)
-        )
-        button_layout = BoxLayout(spacing=dp(10), size_hint_y=0.3)
-        download_btn = NeoButton(text="Open GitHub", width=120, height=44, color=INK, bg=BUTTON_BG, active_bg=ACCENT)
-        later_btn = NeoButton(text="Later", width=100, height=44, color=INK, bg=BUTTON_BG, active_bg=ACCENT)
-        button_layout.add_widget(download_btn)
-        button_layout.add_widget(later_btn)
-        popup_layout.add_widget(button_layout)
-        popup = Popup(
-            title="Update Available",
-            content=popup_layout,
-            size_hint=(0.9, 0.4),
-            background_color=_rgba(BG),
-            title_color=_rgba(TEXT),
-            title_size="18sp",
-        )
-        download_btn.bind(on_release=lambda *_: (popup.dismiss(), _open_github()))
-        later_btn.bind(on_release=popup.dismiss)
-        popup.open()
 
 
 if __name__ == "__main__":
