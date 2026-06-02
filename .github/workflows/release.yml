@@ -142,6 +142,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install buildozer "cython<3.1"
 
+      - name: Verify Android build files
+        run: |
+          test -f android/buildozer.spec
+          test -f android/main.py
+          test -f android/assets/icon.png
+          test -f android/assets/logo.png
+
       - name: Build Android APK
         run: |
           cd android
