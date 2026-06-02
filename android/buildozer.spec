@@ -7,7 +7,7 @@ source.dir = .
 source.include_exts = py,png
 source.exclude_dirs = bin,.buildozer,__pycache__
 
-version.filename = %(source.dir)s/main.py
+version = 1.0.0
 requirements = python3,kivy,pyjnius
 
 orientation = portrait
