@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Packaged PNG icon assets in desktop binaries for faster startup icon rendering
 - Detailed generated release notes with changelog highlights, grouped commits, compare links, and release asset sizes
 
+### Changed
+
+- Android UI now matches the desktop Addy visual system with leaf-shaped cards, hard black shadows, compact header rhythm, and matching copy feedback
+
 ## [1.0.0] — 2026-06-01
 
 ### Added

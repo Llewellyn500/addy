@@ -33,7 +33,9 @@ CARD_BG = "#8252e9"
 TEXT = "#ffffff"
 TEXT_DIM = "#e2daff"
 ACCENT = "#ffd23f"
-COPY_OK = "#10b981"
+BORDER = "#000000"
+BUTTON_BG = "#ffffff"
+COPY_OK = "#16a34a"
 INK = "#0c0a14"
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
 
@@ -59,29 +61,63 @@ class InterfaceInfo:
 
 class Surface(BoxLayout):
     bg_color = ListProperty(_rgba(CARD_BG))
+    border_color = ListProperty(_rgba(BORDER))
+    shadow_color = ListProperty(_rgba(BORDER))
 
-    def __init__(self, bg_color=None, radius=8, **kwargs):
+    def __init__(
+        self,
+        bg_color=None,
+        radius=20,
+        border_width=2,
+        shadow_offset=5,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if bg_color is not None:
             self.bg_color = bg_color
         self._radius = radius
+        self._border_width = border_width
+        self._shadow_offset = shadow_offset
 
         with self.canvas.before:
-            self._canvas_color = Color(*self.bg_color)
-            self._canvas_rect = RoundedRectangle(
-                pos=self.pos,
-                size=self.size,
-                radius=[dp(self._radius)],
-            )
+            self._shadow_color_instruction = Color(*self.shadow_color)
+            self._shadow_rect = RoundedRectangle(pos=self.pos, size=self.size)
+            self._border_color_instruction = Color(*self.border_color)
+            self._border_rect = RoundedRectangle(pos=self.pos, size=self.size)
+            self._fill_color_instruction = Color(*self.bg_color)
+            self._fill_rect = RoundedRectangle(pos=self.pos, size=self.size)
 
         self.bind(pos=self._sync_canvas, size=self._sync_canvas)
         self.bind(bg_color=self._sync_canvas)
+        self.bind(border_color=self._sync_canvas, shadow_color=self._sync_canvas)
 
     def _sync_canvas(self, *_):
-        self._canvas_color.rgba = self.bg_color
-        self._canvas_rect.pos = self.pos
-        self._canvas_rect.size = self.size
-        self._canvas_rect.radius = [dp(self._radius)]
+        x, y = self.pos
+        width, height = self.size
+        border = dp(self._border_width)
+        shadow = dp(self._shadow_offset)
+        body_width = max(0, width - shadow)
+        body_height = max(0, height - shadow)
+        radius = dp(self._radius)
+        fill_radius = max(0, radius - border)
+
+        self._shadow_color_instruction.rgba = self.shadow_color
+        self._shadow_rect.pos = (x + shadow, y)
+        self._shadow_rect.size = (body_width, body_height)
+        self._shadow_rect.radius = [0, radius, 0, radius]
+
+        self._border_color_instruction.rgba = self.border_color
+        self._border_rect.pos = (x, y + shadow)
+        self._border_rect.size = (body_width, body_height)
+        self._border_rect.radius = [0, radius, 0, radius]
+
+        self._fill_color_instruction.rgba = self.bg_color
+        self._fill_rect.pos = (x + border, y + shadow + border)
+        self._fill_rect.size = (
+            max(0, body_width - border * 2),
+            max(0, body_height - border * 2),
+        )
+        self._fill_rect.radius = [0, fill_radius, 0, fill_radius]
 
 
 def _label(
@@ -115,17 +151,110 @@ def _label(
     return label
 
 
-def _button(text: str, *, width=96, color=INK, bg="#ffffff"):
-    return Button(
+class NeoButton(Button):
+    fill_color = ListProperty(_rgba(BUTTON_BG))
+    border_color = ListProperty(_rgba(BORDER))
+    shadow_color = ListProperty(_rgba(BORDER))
+
+    def __init__(
+        self,
+        *,
+        text: str,
+        width=96,
+        height=44,
+        color=INK,
+        bg=BUTTON_BG,
+        active_bg=ACCENT,
+        radius=8,
+        border_width=2,
+        shadow_offset=3,
+        **kwargs,
+    ):
+        super().__init__(
+            text=text,
+            color=_rgba(color),
+            background_normal="",
+            background_down="",
+            background_color=[0, 0, 0, 0],
+            font_size=sp(13),
+            bold=True,
+            size_hint=(None, None),
+            size=(dp(width), dp(height)),
+            **kwargs,
+        )
+        self._radius = radius
+        self._border_width = border_width
+        self._shadow_offset = shadow_offset
+        self._default_fill = _rgba(bg)
+        self._default_text = _rgba(color)
+        self._active_fill = _rgba(active_bg)
+        self.fill_color = self._default_fill
+
+        with self.canvas.before:
+            self._shadow_color_instruction = Color(*self.shadow_color)
+            self._shadow_rect = RoundedRectangle(pos=self.pos, size=self.size)
+            self._border_color_instruction = Color(*self.border_color)
+            self._border_rect = RoundedRectangle(pos=self.pos, size=self.size)
+            self._fill_color_instruction = Color(*self.fill_color)
+            self._fill_rect = RoundedRectangle(pos=self.pos, size=self.size)
+
+        self.bind(pos=self._sync_canvas, size=self._sync_canvas)
+        self.bind(fill_color=self._sync_canvas)
+        self.bind(border_color=self._sync_canvas, shadow_color=self._sync_canvas)
+        self.bind(state=self._sync_state)
+        self._sync_canvas()
+
+    def set_visual(self, *, text: str | None = None, bg: str | None = None, color: str | None = None):
+        if text is not None:
+            self.text = text
+        if bg is not None:
+            self._default_fill = _rgba(bg)
+        if color is not None:
+            self._default_text = _rgba(color)
+
+        self.color = self._default_text
+        if self.state != "down":
+            self.fill_color = self._default_fill
+
+    def _sync_state(self, *_):
+        self.fill_color = self._active_fill if self.state == "down" else self._default_fill
+
+    def _sync_canvas(self, *_):
+        x, y = self.pos
+        width, height = self.size
+        border = dp(self._border_width)
+        shadow = dp(self._shadow_offset)
+        body_width = max(0, width - shadow)
+        body_height = max(0, height - shadow)
+        radius = dp(self._radius)
+        fill_radius = max(0, radius - border)
+
+        self._shadow_color_instruction.rgba = self.shadow_color
+        self._shadow_rect.pos = (x + shadow, y)
+        self._shadow_rect.size = (body_width, body_height)
+        self._shadow_rect.radius = [0, radius, 0, radius]
+
+        self._border_color_instruction.rgba = self.border_color
+        self._border_rect.pos = (x, y + shadow)
+        self._border_rect.size = (body_width, body_height)
+        self._border_rect.radius = [0, radius, 0, radius]
+
+        self._fill_color_instruction.rgba = self.fill_color
+        self._fill_rect.pos = (x + border, y + shadow + border)
+        self._fill_rect.size = (
+            max(0, body_width - border * 2),
+            max(0, body_height - border * 2),
+        )
+        self._fill_rect.radius = [0, fill_radius, 0, fill_radius]
+
+
+def _button(text: str, *, width=96, height=44, color=INK, bg=BUTTON_BG):
+    return NeoButton(
         text=text,
-        color=_rgba(color),
-        background_normal="",
-        background_down="",
-        background_color=_rgba(bg),
-        font_size=sp(14),
-        bold=True,
-        size_hint=(None, None),
-        size=(dp(width), dp(48)),
+        width=width,
+        height=height,
+        color=color,
+        bg=bg,
     )
 
 
@@ -274,12 +403,17 @@ class InterfaceCard(Surface):
         super().__init__(
             orientation="vertical",
             bg_color=_rgba(CARD_BG),
-            padding=[dp(16), dp(14), dp(16), dp(14)],
-            spacing=dp(8),
+            radius=20,
+            border_width=2,
+            shadow_offset=5,
+            padding=[dp(18), dp(18), dp(24), dp(22)],
+            spacing=dp(7),
             size_hint_y=None,
+            height=dp(1),
             **kwargs,
         )
         self.info = info
+        self.bind(minimum_height=self.setter("height"))
 
         heading = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(30))
         heading.add_widget(_label(info.name, size=16, bold=True, height=30))
@@ -293,7 +427,7 @@ class InterfaceCard(Surface):
                     height=30,
                     shorten=True,
                     size_hint_x=None,
-                    width=120,
+                    width=128,
                 )
             )
         self.add_widget(heading)
@@ -306,29 +440,32 @@ class InterfaceCard(Surface):
         if info.ipv6:
             self.add_widget(self._address_row("IPv6", info.ipv6))
 
-        row_count = int(bool(info.ipv4)) + int(bool(info.ipv6))
-        self.height = dp(86 + (26 if info.description else 0) + row_count * 56)
-
     def _address_row(self, kind: str, address: str):
-        row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(52))
-        row.add_widget(_label(kind, size=13, bold=True, height=52, size_hint_x=None, width=54))
-        row.add_widget(_label(address, size=14, height=52, shorten=True))
+        row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(48))
+        row.add_widget(_label(kind, size=13, bold=True, height=48, size_hint_x=None, width=54))
+        row.add_widget(_label(address, size=14, height=48, shorten=True))
 
-        copy_btn = _button("Copy", width=92)
+        copy_btn = _button("Copy", width=88, height=40)
         copy_btn.bind(on_release=lambda btn: self._copy_address(btn, address))
         row.add_widget(copy_btn)
         return row
 
     def _copy_address(self, btn: Button, address: str):
         Clipboard.copy(address)
-        btn.text = "Copied"
-        btn.background_color = _rgba(COPY_OK)
-        btn.color = _rgba(TEXT)
+        if isinstance(btn, NeoButton):
+            btn.set_visual(text="Copied", bg=COPY_OK, color=TEXT)
+        else:
+            btn.text = "Copied"
+            btn.background_color = _rgba(COPY_OK)
+            btn.color = _rgba(TEXT)
 
         def reset(_):
-            btn.text = "Copy"
-            btn.background_color = _rgba("#ffffff")
-            btn.color = _rgba(INK)
+            if isinstance(btn, NeoButton):
+                btn.set_visual(text="Copy", bg=BUTTON_BG, color=INK)
+            else:
+                btn.text = "Copy"
+                btn.background_color = _rgba(BUTTON_BG)
+                btn.color = _rgba(INK)
 
         Clock.schedule_once(reset, 1.2)
 
@@ -342,24 +479,42 @@ class AddyAndroidApp(App):
 
         root = BoxLayout(
             orientation="vertical",
-            padding=[dp(20), dp(34), dp(20), dp(20)],
-            spacing=dp(16),
+            padding=[dp(20), dp(30), dp(20), dp(18)],
+            spacing=dp(12),
         )
 
-        header = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(52))
-        logo = Image(source=str(ASSET_DIR / "logo.png"), size_hint=(None, None), size=(dp(44), dp(44)))
+        header = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(50))
+        logo = Image(source=str(ASSET_DIR / "logo.png"), size_hint=(None, None), size=(dp(34), dp(34)))
         header.add_widget(logo)
-        header.add_widget(_label("ADDY", size=24, bold=True, height=52))
+        header.add_widget(_label("ADDY", size=24, bold=True, height=50))
 
-        refresh = _button("Refresh", width=112)
-        refresh.bind(on_release=lambda *_: self.refresh_interfaces())
-        header.add_widget(refresh)
+        self.refresh_btn = _button("Refresh", width=110, height=42)
+        self.refresh_btn.bind(on_release=lambda *_: self.refresh_interfaces())
+        header.add_widget(self.refresh_btn)
         root.add_widget(header)
 
-        self.status_label = _label("Scanning networks...", color=TEXT_DIM, size=13, height=24)
-        root.add_widget(self.status_label)
+        section = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(28))
+        section.add_widget(_label("Active network interfaces", size=14, bold=True, height=28))
+        self.status_label = _label(
+            "Scanning...",
+            color=TEXT_DIM,
+            size=12,
+            bold=True,
+            height=28,
+            halign="right",
+            shorten=True,
+            size_hint_x=None,
+            width=132,
+        )
+        section.add_widget(self.status_label)
+        root.add_widget(section)
 
-        scroll = ScrollView(do_scroll_x=False, bar_width=dp(4))
+        scroll = ScrollView(
+            do_scroll_x=False,
+            bar_width=dp(5),
+            bar_color=_rgba(CARD_BG),
+            bar_inactive_color=_rgba(CARD_BG, 0.45),
+        )
         self.cards = BoxLayout(orientation="vertical", spacing=dp(12), size_hint_y=None)
         self.cards.bind(minimum_height=self.cards.setter("height"))
         scroll.add_widget(self.cards)
@@ -369,23 +524,30 @@ class AddyAndroidApp(App):
         return root
 
     def refresh_interfaces(self):
-        self.status_label.text = "Scanning networks..."
+        self.status_label.text = "Scanning..."
+        if hasattr(self, "refresh_btn"):
+            self.refresh_btn.set_visual(text="Scanning", bg=ACCENT, color=INK)
         Clock.schedule_once(lambda _: self._render_interfaces(get_interfaces()), 0)
 
     def _render_interfaces(self, interfaces: list[InterfaceInfo]):
         self.cards.clear_widgets()
+        if hasattr(self, "refresh_btn"):
+            self.refresh_btn.set_visual(text="Refresh", bg=BUTTON_BG, color=INK)
 
         if not interfaces:
             empty = Surface(
                 orientation="vertical",
                 bg_color=_rgba(CARD_BG),
-                padding=[dp(16), dp(20), dp(16), dp(20)],
+                radius=20,
+                border_width=2,
+                shadow_offset=5,
+                padding=[dp(18), dp(18), dp(24), dp(22)],
                 size_hint_y=None,
-                height=dp(96),
+                height=dp(110),
             )
             empty.add_widget(_label("No active network interfaces found.", size=15, bold=True, height=42))
             self.cards.add_widget(empty)
-            self.status_label.text = "No active interfaces"
+            self.status_label.text = "None active"
             return
 
         for info in interfaces:
