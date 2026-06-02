@@ -14,10 +14,13 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import time
+import urllib.request
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from tkinter import font as tkfont, ttk
+from tkinter import font as tkfont, messagebox, ttk
 
 import psutil
 
@@ -62,8 +65,127 @@ def _run(cmd):
 
 
 # ---------------------------------------------------------------------------
-# Platform-aware network enrichment
+# Version management and auto-update
 # ---------------------------------------------------------------------------
+
+__VERSION__ = "0.0.0-dev"
+_GITHUB_REPO = "Llewellyn500/addy"
+_UPDATE_STATE_FILE = Path.home() / ".config" / "addy" / "update-state.json"
+
+
+def _parse_version(version_str: str) -> tuple:
+    """Parse version string 'vYYYY.MM.DD-runid' into comparable tuple.
+
+    Returns (year, month, day, run_id) as ints, or (0, 0, 0, 0) on parse error.
+    """
+    try:
+        s = version_str.lstrip("v")
+        date_part, run_part = s.split("-", 1)
+        year, month, day = map(int, date_part.split("."))
+        run_id = int(run_part)
+        return (year, month, day, run_id)
+    except (ValueError, AttributeError):
+        return (0, 0, 0, 0)
+
+
+def _compare_versions(v1: str, v2: str) -> int:
+    """Compare versions. Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2."""
+    t1, t2 = _parse_version(v1), _parse_version(v2)
+    if t1 < t2:
+        return -1
+    elif t1 > t2:
+        return 1
+    return 0
+
+
+def _get_platform_identifier() -> str:
+    """Return platform-architecture identifier for asset selection."""
+    system = platform.system()
+    machine = platform.machine()
+
+    if system == "Windows":
+        if machine in ("arm64", "ARM64"):
+            return "windows-arm64"
+        return "windows-amd64"
+    elif system == "Darwin":
+        if machine in ("arm64", "ARM64"):
+            return "macos-arm64"
+        return "macos-intel"
+    else:
+        if machine in ("arm64", "aarch64", "ARM64"):
+            return "linux-arm64"
+        return "linux-amd64"
+
+
+def _get_download_folder() -> Path:
+    """Return user's Downloads folder."""
+    if platform.system() == "Darwin":
+        return Path.home() / "Downloads"
+    elif platform.system() == "Windows":
+        return Path.home() / "Downloads"
+    else:
+        return Path.home() / "Downloads"
+
+
+def _fetch_github_latest_release() -> dict | None:
+    """Fetch latest release info from GitHub API.
+
+    Returns {"tag": "v...", "version": "v...", "url": "https://...", "platform": "..."}
+    or None on error.
+    """
+    try:
+        url = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"User-Agent": "Addy"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+
+        tag = data.get("tag_name", "")
+        platform_id = _get_platform_identifier()
+
+        for asset in data.get("assets", []):
+            asset_name = asset.get("name", "")
+            if platform_id in asset_name:
+                return {
+                    "tag": tag,
+                    "version": tag,
+                    "url": asset.get("browser_download_url", ""),
+                    "platform": platform_id,
+                }
+        return None
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, Exception):
+        return None
+
+
+def _load_update_state() -> dict:
+    """Load update check state from config file."""
+    try:
+        if _UPDATE_STATE_FILE.exists():
+            with open(_UPDATE_STATE_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"last_check": 0, "last_available": None}
+
+
+def _save_update_state(state: dict) -> None:
+    """Save update check state to config file."""
+    try:
+        _UPDATE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_UPDATE_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
+def _download_file(url: str, dest: Path) -> bool:
+    """Download file from URL to destination. Returns True on success."""
+    try:
+        urllib.request.urlretrieve(url, dest)
+        return dest.exists()
+    except Exception:
+        return False
+
+
 
 def _enrich_windows():
     info: dict[str, dict] = {}
@@ -844,6 +966,9 @@ class AddyApp:
         self._show_loading()
         self._refresh_async()
 
+        # Check for updates in background (non-blocking)
+        threading.Thread(target=self._check_for_updates_bg, daemon=True).start()
+
     def _resolve_font_family(self):
         try:
             available = {name.casefold(): name for name in tkfont.families(self.root)}
@@ -949,6 +1074,141 @@ class AddyApp:
         except Exception:
             pass
 
+    def _check_updates_clicked(self):
+        """Handle manual check updates button click."""
+        self.check_updates_btn.configure_button(text="Checking...", bg="#ffd23f")
+        threading.Thread(target=self._check_for_updates_bg, kwargs={"force": True}, daemon=True).start()
+
+    def _check_for_updates_bg(self, force=False):
+        """Run in background thread — check for updates."""
+        try:
+            state = _load_update_state()
+            now = time.time()
+
+            if not force and (now - state.get("last_check", 0) < 86400):
+                return
+
+            release = _fetch_github_latest_release()
+            if not release:
+                self.root.after(0, self._reset_check_btn_error)
+                return
+
+            state["last_check"] = now
+            latest_version = release.get("version", "")
+            state["last_available"] = latest_version
+
+            if _compare_versions(__VERSION__, latest_version) < 0:
+                _save_update_state(state)
+                self.root.after(0, lambda: self._show_update_dialog(latest_version, release.get("url", "")))
+            else:
+                _save_update_state(state)
+                self.root.after(0, self._reset_check_btn_uptodate)
+        except Exception:
+            self.root.after(0, self._reset_check_btn_error)
+
+    def _reset_check_btn_uptodate(self):
+        """Reset check button after successful check."""
+        try:
+            messagebox.showinfo("Addy", "You're up to date!")
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+    def _reset_check_btn_error(self):
+        """Reset check button on error."""
+        try:
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+    def _show_update_dialog(self, new_version: str, download_url: str):
+        """Show update available dialog."""
+        try:
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+        msg = f"Addy {new_version} is available.\nYou have {__VERSION__}.\n\nDownload to Downloads folder?"
+        result = messagebox.askyesnocancel("Update Available", msg, icon=messagebox.INFO)
+
+        if result is True:
+            self._download_update(new_version, download_url)
+        elif result is False:
+            pass
+
+    def _download_update(self, version: str, download_url: str):
+        """Download update to user's Downloads folder."""
+        try:
+            downloads = _get_download_folder()
+            downloads.mkdir(parents=True, exist_ok=True)
+
+            platform_id = _get_platform_identifier()
+            if platform_id.startswith("windows"):
+                filename = f"addy-{platform_id}.exe"
+            elif platform_id.startswith("macos"):
+                filename = f"addy-{platform_id}.zip"
+            else:
+                filename = f"addy-{platform_id}"
+
+            dest_file = downloads / filename
+            messagebox.showinfo("Update", f"Downloading {filename}...")
+
+            if _download_file(download_url, dest_file):
+                self._show_install_instructions(version, dest_file)
+            else:
+                messagebox.showerror("Error", "Failed to download update. Please visit GitHub to download manually.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Download failed: {e}")
+
+    def _show_install_instructions(self, version: str, file_path: Path):
+        """Show installation instructions to user."""
+        platform_name = _get_platform_identifier()
+        downloads = _get_download_folder()
+
+        if platform_name.startswith("macos"):
+            msg = (
+                f"Update downloaded to {file_path}\n\n"
+                "To install:\n"
+                "1. Unzip the file\n"
+                "2. Move addy.app to /Applications\n"
+                "3. Restart Addy\n\n"
+                "Click OK to open Downloads folder."
+            )
+        elif platform_name.startswith("windows"):
+            msg = (
+                f"Update downloaded to {file_path}\n\n"
+                "To install:\n"
+                "1. Close Addy\n"
+                "2. Copy addy-windows-*.exe to your Addy installation folder\n"
+                "3. Replace the existing binary\n"
+                "4. Restart Addy\n\n"
+                "Click OK to open Downloads folder."
+            )
+        else:
+            msg = (
+                f"Update downloaded to {file_path}\n\n"
+                "To install:\n"
+                "1. Run: chmod +x {file_path.name}\n"
+                "2. Move to ~/bin or /usr/local/bin\n"
+                "3. Restart Addy\n\n"
+                "Click OK to open Downloads folder."
+            )
+
+        if messagebox.showinfo("Installation Instructions", msg) == "ok":
+            self._open_folder(downloads)
+
+    def _open_folder(self, folder_path: Path):
+        """Open folder in system file browser."""
+        try:
+            if platform.system() == "Darwin":
+                subprocess.Popen(["open", str(folder_path)], creationflags=_NO_WINDOW)
+            elif platform.system() == "Windows":
+                subprocess.Popen(["explorer", str(folder_path)], creationflags=_NO_WINDOW)
+            else:
+                subprocess.Popen(["xdg-open", str(folder_path)], creationflags=_NO_WINDOW)
+        except Exception:
+            pass
+
     # -- Layout ---------------------------------------------------------------
 
     def _build_ui(self):
@@ -999,6 +1259,13 @@ class AddyApp:
             width=self.REFRESH_WIDTH, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 12, "bold")
         )
         self.refresh_btn.pack(side="right")
+
+        self.check_updates_btn = NeoButton(
+            header, text="Check Updates", command=self._check_updates_clicked,
+            bg=self.BG, button_bg="#ffffff", hover_bg="#ffd23f",
+            width=140, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 11, "bold")
+        )
+        self.check_updates_btn.pack(side="right", padx=(0, 8))
 
         import webbrowser
         self.github_btn = NeoButton(
