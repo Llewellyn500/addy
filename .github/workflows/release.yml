@@ -106,7 +106,7 @@ jobs:
 
   # ── Build Android companion APK ──────────────────────────────────────────
   android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -123,6 +123,8 @@ jobs:
           sudo apt-get install -y \
             autoconf \
             automake \
+            autotools-dev \
+            build-essential \
             ccache \
             cmake \
             gettext \
@@ -131,9 +133,11 @@ jobs:
             libncurses5-dev \
             libncursesw5-dev \
             libssl-dev \
+            libltdl-dev \
             libtool \
             libtool-bin \
             m4 \
+            make \
             libtinfo6 \
             openjdk-17-jdk \
             pkg-config \
