@@ -9,6 +9,7 @@ foreground mobile app.
 from __future__ import annotations
 
 import socket
+import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from kivy.uix.button import Button
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
+from kivy.utils import escape_markup
 
 __version__ = "1.0.0"
 
@@ -38,6 +40,31 @@ BUTTON_BG = "#ffffff"
 COPY_OK = "#16a34a"
 INK = "#0c0a14"
 ASSET_DIR = Path(__file__).resolve().parent / "assets"
+GITHUB_URL = "https://github.com/Llewellyn500/addy"
+
+HEADER_LOGO_SIZE = 28
+HEADER_HEIGHT = 40
+HEADER_TITLE_SIZE = 20
+HEADER_SPACING = 8
+ACTION_HEIGHT = 40
+REFRESH_WIDTH = 124
+GITHUB_WIDTH = 100
+COMPACT_REFRESH_WIDTH = 108
+COMPACT_GITHUB_WIDTH = 84
+
+CARD_RADIUS = 20
+CARD_BORDER = 2
+CARD_SHADOW = 5
+CARD_PADDING = [16, 14, 21, 19]
+CARD_SPACING = 4
+
+TITLE_SIZE = 13
+DESCRIPTION_SIZE = 11
+ADDRESS_LABEL_SIZE = 10
+ADDRESS_SIZE = 11
+ROW_HEIGHT = 38
+COPY_WIDTH = 84
+COPY_HEIGHT = 34
 
 
 def _rgba(hex_color: str, alpha: float = 1.0) -> list[float]:
@@ -151,6 +178,12 @@ def _label(
     return label
 
 
+def _markup_label(text: str, *, size=14, height=28, shorten=False):
+    label = _label(text, size=size, bold=False, height=height, shorten=shorten)
+    label.markup = True
+    return label
+
+
 class NeoButton(Button):
     fill_color = ListProperty(_rgba(BUTTON_BG))
     border_color = ListProperty(_rgba(BORDER))
@@ -258,6 +291,20 @@ def _button(text: str, *, width=96, height=44, color=INK, bg=BUTTON_BG):
     )
 
 
+def _open_github():
+    try:
+        from jnius import autoclass
+
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Intent = autoclass("android.content.Intent")
+        Uri = autoclass("android.net.Uri")
+
+        intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL))
+        PythonActivity.mActivity.startActivity(intent)
+    except Exception:
+        webbrowser.open(GITHUB_URL)
+
+
 def _java_interfaces() -> list[InterfaceInfo]:
     try:
         from jnius import autoclass
@@ -314,7 +361,7 @@ def _java_interfaces() -> list[InterfaceInfo]:
                 ipv4=ipv4,
                 ipv6=ipv6,
                 description=description if description != name else "",
-                network=network_label,
+                network=_interface_network_label(name, network_label),
             )
         )
 
@@ -347,6 +394,26 @@ def _android_network_label() -> str | None:
             return "VPN"
     except Exception:
         return None
+
+    return None
+
+
+def _interface_network_label(interface_name: str, active_label: str | None) -> str | None:
+    name = interface_name.lower()
+
+    if name.startswith(("wlan", "wifi")):
+        if active_label and active_label not in {"Cellular", "Ethernet", "VPN"}:
+            return active_label
+        return "Wi-Fi"
+
+    if name.startswith(("rmnet", "ccmni", "pdp", "wwan", "cell")):
+        return "Cellular"
+
+    if name.startswith(("eth", "usb")):
+        return "Ethernet"
+
+    if name.startswith(("tun", "tap", "ppp")):
+        return "VPN"
 
     return None
 
@@ -403,11 +470,11 @@ class InterfaceCard(Surface):
         super().__init__(
             orientation="vertical",
             bg_color=_rgba(CARD_BG),
-            radius=20,
-            border_width=2,
-            shadow_offset=5,
-            padding=[dp(18), dp(18), dp(24), dp(22)],
-            spacing=dp(7),
+            radius=CARD_RADIUS,
+            border_width=CARD_BORDER,
+            shadow_offset=CARD_SHADOW,
+            padding=[dp(value) for value in CARD_PADDING],
+            spacing=dp(CARD_SPACING),
             size_hint_y=None,
             height=dp(1),
             **kwargs,
@@ -415,25 +482,15 @@ class InterfaceCard(Surface):
         self.info = info
         self.bind(minimum_height=self.setter("height"))
 
-        heading = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(30))
-        heading.add_widget(_label(info.name, size=16, bold=True, height=30))
+        heading = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(24))
+        title_text = f"[b]{escape_markup(info.name)}[/b]"
         if info.network:
-            heading.add_widget(
-                _label(
-                    info.network,
-                    color=ACCENT,
-                    size=13,
-                    bold=True,
-                    height=30,
-                    shorten=True,
-                    size_hint_x=None,
-                    width=128,
-                )
-            )
+            title_text += f"  ·  [color=ffd23f][b]{escape_markup(info.network)}[/b][/color]"
+        heading.add_widget(_markup_label(title_text, size=TITLE_SIZE, height=24, shorten=True))
         self.add_widget(heading)
 
         if info.description:
-            self.add_widget(_label(info.description, color=TEXT_DIM, size=13, height=26, shorten=True))
+            self.add_widget(_label(info.description, color=TEXT_DIM, size=DESCRIPTION_SIZE, height=22, shorten=True))
 
         if info.ipv4:
             self.add_widget(self._address_row("IPv4", info.ipv4))
@@ -441,11 +498,13 @@ class InterfaceCard(Surface):
             self.add_widget(self._address_row("IPv6", info.ipv6))
 
     def _address_row(self, kind: str, address: str):
-        row = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(48))
-        row.add_widget(_label(kind, size=13, bold=True, height=48, size_hint_x=None, width=54))
-        row.add_widget(_label(address, size=14, height=48, shorten=True))
+        row = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(ROW_HEIGHT))
+        row.add_widget(
+            _label(kind, size=ADDRESS_LABEL_SIZE, bold=True, height=ROW_HEIGHT, size_hint_x=None, width=50)
+        )
+        row.add_widget(_label(address, size=ADDRESS_SIZE, height=ROW_HEIGHT, shorten=True))
 
-        copy_btn = _button("Copy", width=88, height=40)
+        copy_btn = _button("Copy", width=COPY_WIDTH, height=COPY_HEIGHT)
         copy_btn.bind(on_release=lambda btn: self._copy_address(btn, address))
         row.add_widget(copy_btn)
         return row
@@ -479,35 +538,39 @@ class AddyAndroidApp(App):
 
         root = BoxLayout(
             orientation="vertical",
-            padding=[dp(20), dp(30), dp(20), dp(18)],
-            spacing=dp(12),
+            padding=[dp(20), dp(18), dp(20), dp(18)],
+            spacing=dp(10),
         )
 
-        header = BoxLayout(orientation="horizontal", spacing=dp(10), size_hint_y=None, height=dp(50))
-        logo = Image(source=str(ASSET_DIR / "logo.png"), size_hint=(None, None), size=(dp(34), dp(34)))
-        header.add_widget(logo)
-        header.add_widget(_label("ADDY", size=24, bold=True, height=50))
+        compact = Window.width <= dp(380)
+        github_width = COMPACT_GITHUB_WIDTH if compact else GITHUB_WIDTH
+        refresh_width = COMPACT_REFRESH_WIDTH if compact else REFRESH_WIDTH
 
-        self.refresh_btn = _button("Refresh", width=110, height=42)
+        header = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(HEADER_SPACING),
+            size_hint_y=None,
+            height=dp(HEADER_HEIGHT),
+        )
+        logo = Image(
+            source=str(ASSET_DIR / "logo.png"),
+            size_hint=(None, None),
+            size=(dp(HEADER_LOGO_SIZE), dp(HEADER_LOGO_SIZE)),
+            pos_hint={"center_y": 0.5},
+        )
+        header.add_widget(logo)
+        header.add_widget(_label("ADDY", size=HEADER_TITLE_SIZE, bold=True, height=HEADER_HEIGHT, shorten=True))
+
+        self.github_btn = _button("GitHub", width=github_width, height=ACTION_HEIGHT)
+        self.github_btn.bind(on_release=lambda *_: _open_github())
+        header.add_widget(self.github_btn)
+
+        self.refresh_btn = _button("Refresh", width=refresh_width, height=ACTION_HEIGHT)
         self.refresh_btn.bind(on_release=lambda *_: self.refresh_interfaces())
         header.add_widget(self.refresh_btn)
         root.add_widget(header)
 
-        section = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(28))
-        section.add_widget(_label("Active network interfaces", size=14, bold=True, height=28))
-        self.status_label = _label(
-            "Scanning...",
-            color=TEXT_DIM,
-            size=12,
-            bold=True,
-            height=28,
-            halign="right",
-            shorten=True,
-            size_hint_x=None,
-            width=132,
-        )
-        section.add_widget(self.status_label)
-        root.add_widget(section)
+        root.add_widget(_label("Active network interfaces", size=10, bold=True, height=24))
 
         scroll = ScrollView(
             do_scroll_x=False,
@@ -524,10 +587,16 @@ class AddyAndroidApp(App):
         return root
 
     def refresh_interfaces(self):
-        self.status_label.text = "Scanning..."
         if hasattr(self, "refresh_btn"):
             self.refresh_btn.set_visual(text="Scanning", bg=ACCENT, color=INK)
+        self._show_loading()
         Clock.schedule_once(lambda _: self._render_interfaces(get_interfaces()), 0)
+
+    def _show_loading(self):
+        if not hasattr(self, "cards"):
+            return
+        self.cards.clear_widgets()
+        self.cards.add_widget(_label("Scanning networks...", size=11, bold=True, height=56, halign="center"))
 
     def _render_interfaces(self, interfaces: list[InterfaceInfo]):
         self.cards.clear_widgets()
@@ -538,23 +607,19 @@ class AddyAndroidApp(App):
             empty = Surface(
                 orientation="vertical",
                 bg_color=_rgba(CARD_BG),
-                radius=20,
-                border_width=2,
-                shadow_offset=5,
-                padding=[dp(18), dp(18), dp(24), dp(22)],
+                radius=CARD_RADIUS,
+                border_width=CARD_BORDER,
+                shadow_offset=CARD_SHADOW,
+                padding=[dp(value) for value in CARD_PADDING],
                 size_hint_y=None,
-                height=dp(110),
+                height=dp(86),
             )
             empty.add_widget(_label("No active network interfaces found.", size=15, bold=True, height=42))
             self.cards.add_widget(empty)
-            self.status_label.text = "None active"
             return
 
         for info in interfaces:
             self.cards.add_widget(InterfaceCard(info))
-
-        noun = "interface" if len(interfaces) == 1 else "interfaces"
-        self.status_label.text = f"{len(interfaces)} active {noun}"
 
 
 if __name__ == "__main__":

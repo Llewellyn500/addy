@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Android UI now matches the desktop Addy visual system with leaf-shaped cards, hard black shadows, compact header rhythm, and matching copy feedback
+- Linux and macOS desktop builds now use the same Addy header sizing, GitHub action, font fallback order, and icon packaging as the Windows build
+- Android header alignment now mirrors the desktop header and includes the GitHub action next to Refresh
+- Android connected-network labels are now assigned per interface instead of reusing one global network label for every row
 
 ## [1.0.0] — 2026-06-01
 

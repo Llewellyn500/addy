@@ -18,11 +18,11 @@ Addy is a compact utility UI with a dark neo-brutalist identity: asymmetric leaf
 
 ## Typography
 
-Use a familiar sans family per platform. Desktop prefers Segoe UI, SF Pro Text, or Cantarell. Android uses Kivy's native/default sans. Labels are compact, bold where scannability matters, and never decorative.
+Use the Windows visual rhythm as the source of truth. Desktop tries Segoe UI first on every OS, then falls back through common sans families only when the preferred face is unavailable. Android uses the same size hierarchy and compact spacing, adapted only where the screen width would otherwise clip controls.
 
 ## Components
 
-- App header: logo, `ADDY`, and a leaf-shaped refresh action.
+- App header: 28px logo, `ADDY`, a leaf-shaped GitHub action, and a leaf-shaped Refresh action.
 - Section label: `Active network interfaces`, left aligned above the list.
 - Interface card: leaf-shaped violet panel with black border and offset shadow.
 - Copy button: compact leaf-shaped white button with black border and shadow, turning green after copy.

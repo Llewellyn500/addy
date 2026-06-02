@@ -25,13 +25,13 @@ jobs:
             name: linux-amd64
             binary: addy
             python_arch: x64
-            pyinstaller_extra: ""
+            pyinstaller_extra: "--icon=docs/assets/icon.png"
             data_separator: ":"
           - os: ubuntu-24.04-arm
             name: linux-arm64
             binary: addy
             python_arch: arm64
-            pyinstaller_extra: ""
+            pyinstaller_extra: "--icon=docs/assets/icon.png"
             data_separator: ":"
           - os: windows-latest
             name: windows-amd64

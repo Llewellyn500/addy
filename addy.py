@@ -17,7 +17,7 @@ import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from tkinter import ttk
+from tkinter import font as tkfont, ttk
 
 import psutil
 
@@ -787,11 +787,22 @@ class AddyApp:
     COPY_OK = "#10b981"          # Strong green
     BORDER = "#000000"           # Deep black border
     CONN_COLOR = "#ffd23f"       # Vibrant yellow
-    FONT_FAMILY = (
-        "Segoe UI"
-        if platform.system() == "Windows"
-        else ("SF Pro Text" if platform.system() == "Darwin" else "Cantarell")
+    FONT_FAMILY = "Segoe UI"
+    FONT_CANDIDATES = (
+        "Segoe UI",
+        "Arial",
+        "Helvetica",
+        "Liberation Sans",
+        "DejaVu Sans",
+        "Cantarell",
     )
+    GITHUB_URL = "https://github.com/Llewellyn500/addy"
+
+    HEADER_LOGO_SIZE = 28
+    HEADER_TITLE_SIZE = 20
+    ACTION_HEIGHT = 40
+    REFRESH_WIDTH = 124
+    GITHUB_WIDTH = 100
 
     def __init__(self):
         if platform.system() == "Windows":
@@ -807,6 +818,7 @@ class AddyApp:
         self.root.configure(bg=self.BG)
         self.root.resizable(False, False)
         self.root.minsize(420, 200)
+        self.FONT_FAMILY = self._resolve_font_family()
 
         if platform.system() == "Darwin":
             self.root.createcommand("tk::mac::Quit", self._quit)
@@ -831,6 +843,19 @@ class AddyApp:
         # First launch: show loading placeholder, fetch data in background
         self._show_loading()
         self._refresh_async()
+
+    def _resolve_font_family(self):
+        try:
+            available = {name.casefold(): name for name in tkfont.families(self.root)}
+        except Exception:
+            available = {}
+
+        for candidate in self.FONT_CANDIDATES:
+            family = available.get(candidate.casefold())
+            if family:
+                return family
+
+        return self.FONT_FAMILY
 
     # -- System tray ----------------------------------------------------------
 
@@ -956,7 +981,7 @@ class AddyApp:
 
         if _HAS_PIL:
             try:
-                self.logo_img_pil = _create_logo_image(28)
+                self.logo_img_pil = _create_logo_image(self.HEADER_LOGO_SIZE)
                 self.logo_img = ImageTk.PhotoImage(self.logo_img_pil)
                 logo_lbl = tk.Label(header, image=self.logo_img, bg=self.BG)
                 logo_lbl.pack(side="left", padx=(0, 8))
@@ -964,22 +989,22 @@ class AddyApp:
                 pass
 
         tk.Label(
-            header, text="ADDY", font=(self.FONT_FAMILY, 20, "bold"),
+            header, text="ADDY", font=(self.FONT_FAMILY, self.HEADER_TITLE_SIZE, "bold"),
             bg=self.BG, fg=self.TEXT,
         ).pack(side="left")
 
         self.refresh_btn = NeoButton(
             header, text="Refresh ↻", command=lambda: self._refresh_async(force=True),
             bg=self.BG, button_bg="#ffffff", hover_bg="#ffd23f",
-            width=124, height=40, font=(self.FONT_FAMILY, 12, "bold")
+            width=self.REFRESH_WIDTH, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 12, "bold")
         )
         self.refresh_btn.pack(side="right")
 
         import webbrowser
         self.github_btn = NeoButton(
-            header, text="GitHub", command=lambda: webbrowser.open("https://github.com/Llewellyn500/addy"),
+            header, text="GitHub", command=lambda: webbrowser.open(self.GITHUB_URL),
             bg=self.BG, button_bg="#ffffff", hover_bg="#ffd23f",
-            width=100, height=40, font=(self.FONT_FAMILY, 12, "bold")
+            width=self.GITHUB_WIDTH, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 12, "bold")
         )
         self.github_btn.pack(side="right", padx=(0, 10))
 
