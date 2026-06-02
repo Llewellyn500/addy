@@ -11,9 +11,12 @@ import json
 import platform
 import socket
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+from pathlib import Path
 from tkinter import ttk
 
 import psutil
@@ -29,6 +32,14 @@ try:
     _HAS_TRAY = True
 except ImportError:
     _HAS_TRAY = False
+
+
+_APP_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+_ASSET_DIR = _APP_ROOT / "docs" / "assets"
+
+
+def _asset_path(filename):
+    return _ASSET_DIR / filename
 
 
 # ---------------------------------------------------------------------------
@@ -250,9 +261,35 @@ def get_interfaces():
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=None)
+def _load_logo_asset(size):
+    if not _HAS_PIL:
+        return None
+
+    for filename in ("icon.png", "logo.png"):
+        path = _asset_path(filename)
+        if not path.exists():
+            continue
+
+        try:
+            with Image.open(path) as img:
+                return img.convert("RGBA").resize(
+                    (size, size),
+                    Image.Resampling.LANCZOS,
+                )
+        except Exception:
+            continue
+
+    return None
+
+
 def _create_logo_image(size=64):
     if not _HAS_PIL:
         return None
+
+    asset_img = _load_logo_asset(size)
+    if asset_img:
+        return asset_img.copy()
 
     scale = 4
     canvas_size = size * scale
@@ -330,6 +367,9 @@ def _create_logo_image(size=64):
 
 
 def _create_tray_image():
+    if not _HAS_PIL:
+        return None
+
     if _HAS_PIL:
         img = _create_logo_image(64)
         if img:
@@ -799,9 +839,13 @@ class AddyApp:
             self.root.protocol("WM_DELETE_WINDOW", self._quit)
             return
         try:
+            tray_image = _create_tray_image()
+            if tray_image is None:
+                raise RuntimeError("tray icon image unavailable")
+
             self.tray_icon = pystray.Icon(
                 "addy",
-                _create_tray_image(),
+                tray_image,
                 "Addy – click to show",
                 menu=pystray.Menu(
                     pystray.MenuItem("Show Addy", self._tray_show, default=True),

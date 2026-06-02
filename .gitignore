@@ -30,3 +30,7 @@ Desktop.ini
 # PyInstaller
 *.manifest
 *.log
+
+# Android / Buildozer
+android/.buildozer/
+android/bin/

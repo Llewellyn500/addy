@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Android ARM64 companion app with a Buildozer configuration for APK releases
+- Native ARM64 release targets for Linux and Windows on Arm
+- Packaged PNG icon assets in desktop binaries for faster startup icon rendering
+- Detailed generated release notes with changelog highlights, grouped commits, compare links, and release asset sizes
+
 ## [1.0.0] — 2026-06-01
 
 ### Added

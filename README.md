@@ -8,7 +8,7 @@ A beautiful, ultra-lightweight cross-platform system tray utility that displays 
   <img src="https://img.shields.io/github/actions/workflow/status/Llewellyn500/addy/release.yml?branch=main&style=flat-square&logo=github-actions&logoColor=white" alt="Build Status">
   <img src="https://img.shields.io/github/license/Llewellyn500/addy?style=flat-square&color=blue" alt="License">
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python Version">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square" alt="Supported Platforms">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey?style=flat-square" alt="Supported Platforms">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome">
 </p>
 
@@ -29,7 +29,8 @@ A beautiful, ultra-lightweight cross-platform system tray utility that displays 
 - 📋 **One-Click Copy**: Clicking any IPv4 or IPv6 address copies it directly to your clipboard with a visual confirmation indicator.
 - 🔄 **Smart Refresh**: Automatically checks network status on demand, or on a quiet background thread.
 - 🔋 **Zero Idle Footprint**: Uses close to 0% CPU and minimal RAM when minimized, making it perfect to keep running constantly in the background.
-- 📦 **No Python Required**: Automatically packaged into standalone executables (`.exe`, `.app`, `.elf`) for every platform via GitHub Actions.
+- 📦 **No Python Required**: Automatically packaged into standalone desktop binaries and an Android APK via GitHub Actions.
+- ⚡ **Native ARM Builds**: Ships dedicated ARM64 builds for Linux, Windows on Arm, Apple Silicon, and Android so icons and UI assets load without emulation overhead.
 
 ---
 
@@ -38,8 +39,12 @@ A beautiful, ultra-lightweight cross-platform system tray utility that displays 
 ### 1. Download Pre-built Binaries (Recommended)
 You don't need Python to run Addy. Go to the [Releases](https://github.com/Llewellyn500/addy/releases) tab and download the standalone executable for your operating system:
 * **Windows**: `addy-windows-amd64.exe`
-* **macOS**: `addy-macos-arm64` (Apple Silicon)
+* **Windows on Arm**: `addy-windows-arm64.exe`
+* **macOS**: `addy-macos-arm64.zip` (Apple Silicon)
+* **macOS Intel**: `addy-macos-intel.zip`
 * **Linux**: `addy-linux-amd64`
+* **Linux ARM64**: `addy-linux-arm64`
+* **Android**: `addy-android-arm64.apk`
 
 ### 2. Running from Source
 To run Addy with your own Python environment:
@@ -76,6 +81,16 @@ To run Addy with your own Python environment:
   * **Arch Linux**: `sudo pacman -S tk`
 * System tray (`pystray`) support requires an appindicator library. Under modern desktop environments (GNOME, KDE), ensure you have:
   * **Ubuntu/Debian**: `sudo apt install libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1`
+
+### 🤖 Android
+* Android builds use the `android/` Kivy companion app and are packaged as ARM64 APKs.
+* The Android app runs as a foreground network-address viewer with copy buttons. Android does not support desktop-style system tray apps, so the tray/minimize behavior remains desktop-only.
+* To build locally on Linux or WSL:
+  ```bash
+  cd android
+  pip install buildozer "cython<3.1"
+  buildozer -v android debug
+  ```
 
 ---
 

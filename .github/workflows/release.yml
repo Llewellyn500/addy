@@ -24,19 +24,39 @@ jobs:
           - os: ubuntu-latest
             name: linux-amd64
             binary: addy
+            python_arch: x64
             pyinstaller_extra: ""
+            data_separator: ":"
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+            binary: addy
+            python_arch: arm64
+            pyinstaller_extra: ""
+            data_separator: ":"
           - os: windows-latest
             name: windows-amd64
             binary: addy.exe
+            python_arch: x64
             pyinstaller_extra: "--noconsole --icon=docs/assets/icon.ico"
+            data_separator: ";"
+          - os: windows-11-arm
+            name: windows-arm64
+            binary: addy.exe
+            python_arch: arm64
+            pyinstaller_extra: "--noconsole --icon=docs/assets/icon.ico"
+            data_separator: ";"
           - os: macos-latest      # Apple Silicon (ARM64)
             name: macos-arm64
             binary: addy
+            python_arch: arm64
             pyinstaller_extra: "--noconsole --icon=docs/assets/icon.icns"
+            data_separator: ":"
           - os: macos-15-intel    # Intel (x86_64)
             name: macos-intel
             binary: addy
+            python_arch: x64
             pyinstaller_extra: "--noconsole --icon=docs/assets/icon.icns"
+            data_separator: ":"
 
     runs-on: ${{ matrix.os }}
 
@@ -48,6 +68,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          architecture: ${{ matrix.python_arch }}
 
       - name: Install dependencies
         run: |
@@ -58,6 +79,8 @@ jobs:
         shell: bash
         run: |
           pyinstaller --onefile ${{ matrix.pyinstaller_extra }} \
+            --add-data "docs/assets/icon.png${{ matrix.data_separator }}docs/assets" \
+            --add-data "docs/assets/logo.png${{ matrix.data_separator }}docs/assets" \
             --name addy \
             --clean \
             addy.py
@@ -81,14 +104,73 @@ jobs:
           path: dist/addy-${{ matrix.name }}*
           if-no-files-found: error
 
+  # ── Build Android companion APK ──────────────────────────────────────────
+  android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Android build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf \
+            ccache \
+            cmake \
+            git \
+            libffi-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libssl-dev \
+            libtool \
+            libtinfo6 \
+            openjdk-17-jdk \
+            pkg-config \
+            unzip \
+            zip \
+            zlib1g-dev
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer "cython<3.1"
+
+      - name: Build Android APK
+        run: |
+          cd android
+          buildozer -v android debug
+          mkdir -p ../dist
+          APK="$(find bin -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
+          cp "$APK" ../dist/addy-android-arm64.apk
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: addy-android-arm64
+          path: dist/addy-android-arm64.apk
+          if-no-files-found: error
+
   # ── Create a release with all binaries ────────────────────────────────────
   release:
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - name: Checkout release notes source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -105,23 +187,138 @@ jobs:
       - name: List release assets
         run: ls -lhR dist/
 
+      - name: Generate release notes
+        id: notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            RANGE="$PREVIOUS_TAG..HEAD"
+            COMPARE_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$PREVIOUS_TAG...$GITHUB_SHA"
+          else
+            RANGE="HEAD"
+            COMPARE_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commits/$GITHUB_SHA"
+          fi
+
+          SHORT_SHA="$(git rev-parse --short "$GITHUB_SHA")"
+          COMMIT_COUNT="$(git rev-list --count "$RANGE")"
+
+          cat > release-notes.md <<EOF
+          ## Summary
+
+          Addy $TAG was built from \`$SHORT_SHA\` and includes $COMMIT_COUNT commit(s).
+
+          EOF
+
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "Compare this release with [$PREVIOUS_TAG]($COMPARE_URL)." >> release-notes.md
+          else
+            echo "This is the first tagged release in the repository history." >> release-notes.md
+          fi
+
+          awk '
+            /^## \[Unreleased\]/ { capture = 1; next }
+            /^## \[/ && capture { exit }
+            capture { print }
+          ' CHANGELOG.md | sed '/^[[:space:]]*$/d' > changelog-highlights.md
+
+          if [[ -s changelog-highlights.md ]]; then
+            {
+              echo
+              echo "## Changelog Highlights"
+              echo
+              cat changelog-highlights.md
+            } >> release-notes.md
+          fi
+
+          echo >> release-notes.md
+          echo "## What Changed" >> release-notes.md
+
+          write_group() {
+            local title="$1"
+            local pattern="$2"
+            local tmp_file
+            tmp_file="$(mktemp)"
+
+            git log --no-merges --pretty=format:'%s (%h)' "$RANGE" \
+              | grep -Ei "$pattern" > "$tmp_file" || true
+
+            if [[ -s "$tmp_file" ]]; then
+              {
+                echo
+                echo "### $title"
+                sed 's/^/- /' "$tmp_file"
+              } >> release-notes.md
+            fi
+
+            rm -f "$tmp_file"
+          }
+
+          write_group "Features" '^feat(\(.+\))?:'
+          write_group "Fixes" '^fix(\(.+\))?:'
+          write_group "Build and Packaging" '^(build|ci)(\(.+\))?:'
+          write_group "Documentation" '^docs(\(.+\))?:'
+          write_group "Maintenance" '^(chore|refactor|perf|test|style)(\(.+\))?:'
+
+          git log --no-merges --pretty=format:'%s (%h)' "$RANGE" \
+            | grep -Eiv '^(feat|fix|build|ci|docs|chore|refactor|perf|test|style)(\(.+\))?:' \
+            > other-changes.md || true
+
+          if [[ -s other-changes.md ]]; then
+            {
+              echo
+              echo "### Other Changes"
+              sed 's/^/- /' other-changes.md
+            } >> release-notes.md
+          fi
+
+          if ! grep -q '^- ' release-notes.md; then
+            {
+              echo
+              echo "No source changes were detected in this release range."
+            } >> release-notes.md
+          fi
+
+          cat >> release-notes.md <<'EOF'
+
+          ## Downloads
+
+          | Platform | File |
+          |----------|------|
+          | 🐧 Linux (x86_64) | `addy-linux-amd64` |
+          | 🐧 Linux (ARM64) | `addy-linux-arm64` |
+          | 🪟 Windows (x86_64) | `addy-windows-amd64.exe` |
+          | 🪟 Windows (ARM64) | `addy-windows-arm64.exe` |
+          | 🍎 macOS (Apple Silicon) | `addy-macos-arm64.zip` |
+          | 🍎 macOS (Intel x86_64) | `addy-macos-intel.zip` |
+          | 🤖 Android (ARM64 APK) | `addy-android-arm64.apk` |
+
+          ## Release Assets
+
+          EOF
+
+          while IFS= read -r asset; do
+            size="$(du -h "$asset" | cut -f1)"
+            echo "- \`$(basename "$asset")\` ($size)" >> release-notes.md
+          done < <(find dist -maxdepth 1 -type f | sort)
+
+          cat >> release-notes.md <<'EOF'
+
+          ## Notes
+
+          > **macOS users:** After downloading, unzip the file, run `chmod -R +x addy.app` in Terminal (if it doesn't open), and then right-click `addy.app` → **Open** to bypass Gatekeeper on first launch.
+          >
+          > **Linux users:** Run `chmod +x addy-linux-amd64` or `chmod +x addy-linux-arm64` to make the binary executable.
+          >
+          > **Android users:** The APK is an unsigned debug build for direct testing. The Android app runs as a foreground companion because Android does not support desktop-style system tray apps.
+          EOF
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: Addy ${{ steps.version.outputs.tag }}
-          body: |
-            ## Downloads
-
-            | Platform | File |
-            |----------|------|
-            | 🐧 Linux (x86_64) | `addy-linux-amd64` |
-            | 🪟 Windows (x86_64) | `addy-windows-amd64.exe` |
-            | 🍎 macOS (Apple Silicon) | `addy-macos-arm64.zip` |
-            | 🍎 macOS (Intel x86_64) | `addy-macos-intel.zip` |
-
-            > **macOS users:** After downloading, unzip the file, run `chmod -R +x addy.app` in Terminal (if it doesn't open), and then right-click `addy.app` → **Open** to bypass Gatekeeper on first launch.
-            >
-            > **Linux users:** Run `chmod +x addy-linux-amd64` to make the binary executable.
-          generate_release_notes: true
+          body_path: release-notes.md
           files: dist/*
