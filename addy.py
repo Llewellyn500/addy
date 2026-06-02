@@ -13,11 +13,15 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
+import urllib.request
+import urllib.error
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from tkinter import font as tkfont, ttk
+from tkinter import font as tkfont, messagebox, ttk
 
 import psutil
 
@@ -62,8 +66,95 @@ def _run(cmd):
 
 
 # ---------------------------------------------------------------------------
-# Platform-aware network enrichment
+# Version management and auto-update
 # ---------------------------------------------------------------------------
+
+__VERSION__ = "0.0.0-dev"
+_GITHUB_REPO = "Llewellyn500/addy"
+_UPDATE_STATE_FILE = Path.home() / ".config" / "addy" / "update-state.json"
+
+
+def _parse_version(version_str: str) -> tuple:
+    """Parse version string 'vYYYY.MM.DD-runid' into comparable tuple."""
+    try:
+        s = version_str.lstrip("v")
+        date_part, run_part = s.split("-", 1)
+        year, month, day = map(int, date_part.split("."))
+        run_id = int(run_part)
+        return (year, month, day, run_id)
+    except (ValueError, AttributeError):
+        return (0, 0, 0, 0)
+
+
+def _compare_versions(v1: str, v2: str) -> int:
+    """Compare versions. Returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2."""
+    t1, t2 = _parse_version(v1), _parse_version(v2)
+    if t1 < t2:
+        return -1
+    elif t1 > t2:
+        return 1
+    return 0
+
+
+def _get_platform_identifier() -> str:
+    """Return platform-architecture identifier for asset selection."""
+    system = platform.system()
+    machine = platform.machine()
+
+    if system == "Windows":
+        return "windows-arm64" if machine in ("arm64", "ARM64") else "windows-amd64"
+    elif system == "Darwin":
+        return "macos-arm64" if machine in ("arm64", "ARM64") else "macos-intel"
+    else:
+        return "linux-arm64" if machine in ("arm64", "aarch64", "ARM64") else "linux-amd64"
+
+
+def _fetch_github_latest_release() -> dict | None:
+    """Fetch latest release info from GitHub API."""
+    try:
+        url = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
+        req = urllib.request.Request(url, headers={"User-Agent": "Addy"})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+
+        tag = data.get("tag_name", "")
+        platform_id = _get_platform_identifier()
+
+        for asset in data.get("assets", []):
+            asset_name = asset.get("name", "")
+            if platform_id in asset_name:
+                return {
+                    "tag": tag,
+                    "version": tag,
+                    "url": asset.get("browser_download_url", ""),
+                    "platform": platform_id,
+                }
+        return None
+    except Exception:
+        return None
+
+
+def _load_update_state() -> dict:
+    """Load update check state from config file."""
+    try:
+        if _UPDATE_STATE_FILE.exists():
+            with open(_UPDATE_STATE_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"last_check": 0, "last_available": None}
+
+
+def _save_update_state(state: dict) -> None:
+    """Save update check state to config file."""
+    try:
+        _UPDATE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_UPDATE_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
 
 def _enrich_windows():
     info: dict[str, dict] = {}
@@ -844,6 +935,9 @@ class AddyApp:
         self._show_loading()
         self._refresh_async()
 
+        # Check for updates in background (non-blocking)
+        threading.Thread(target=self._check_for_updates_bg, daemon=True).start()
+
     def _resolve_font_family(self):
         try:
             available = {name.casefold(): name for name in tkfont.families(self.root)}
@@ -949,6 +1043,66 @@ class AddyApp:
         except Exception:
             pass
 
+    def _check_updates_clicked(self):
+        """Handle manual check updates button click."""
+        self.check_updates_btn.configure_button(text="Checking...", bg="#ffd23f")
+        threading.Thread(target=self._check_for_updates_bg, kwargs={"force": True}, daemon=True).start()
+
+    def _check_for_updates_bg(self, force=False):
+        """Check for updates in background."""
+        try:
+            state = _load_update_state()
+            now = time.time()
+
+            if not force and (now - state.get("last_check", 0) < 86400):
+                return
+
+            release = _fetch_github_latest_release()
+            if not release:
+                self.root.after(0, self._reset_check_btn_error)
+                return
+
+            state["last_check"] = now
+            latest_version = release.get("version", "")
+            state["last_available"] = latest_version
+
+            if _compare_versions(__VERSION__, latest_version) < 0:
+                _save_update_state(state)
+                self.root.after(0, lambda: self._show_update_dialog(latest_version))
+            else:
+                _save_update_state(state)
+                self.root.after(0, self._reset_check_btn_uptodate)
+        except Exception:
+            self.root.after(0, self._reset_check_btn_error)
+
+    def _reset_check_btn_uptodate(self):
+        """Reset check button after successful check."""
+        try:
+            messagebox.showinfo("Addy", "You're up to date!")
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+    def _reset_check_btn_error(self):
+        """Reset check button on error."""
+        try:
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+    def _show_update_dialog(self, new_version: str):
+        """Show update available dialog."""
+        try:
+            self.check_updates_btn.configure_button(text="Check Updates", bg="#ffffff")
+        except Exception:
+            pass
+
+        msg = f"Addy {new_version} is available.\nYou have {__VERSION__}.\n\nOpen GitHub to download?"
+        result = messagebox.askyesno("Update Available", msg, icon=messagebox.INFO)
+
+        if result:
+            webbrowser.open(self.GITHUB_URL)
+
     # -- Layout ---------------------------------------------------------------
 
     def _build_ui(self):
@@ -999,6 +1153,13 @@ class AddyApp:
             width=self.REFRESH_WIDTH, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 12, "bold")
         )
         self.refresh_btn.pack(side="right")
+
+        self.check_updates_btn = NeoButton(
+            header, text="Check Updates", command=self._check_updates_clicked,
+            bg=self.BG, button_bg="#ffffff", hover_bg="#ffd23f",
+            width=140, height=self.ACTION_HEIGHT, font=(self.FONT_FAMILY, 11, "bold")
+        )
+        self.check_updates_btn.pack(side="right", padx=(0, 8))
 
         import webbrowser
         self.github_btn = NeoButton(
